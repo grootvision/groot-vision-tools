@@ -168,7 +168,7 @@ array(
 			'icon'          => '📈',
 			'page'          => 'wpmc-maintenance',
 			'color'         => '#2563eb',
-			'status_option' => 'manage_options',
+			'status_option' => 'wpmc_options',
 			'status_key'    => 'enabled',
 		),
 
