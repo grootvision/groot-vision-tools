@@ -337,17 +337,6 @@ function gv_ghu_render_admin_page() {
 				<button type="submit" class="gvghu-btn">💾 ذخیره تنظیمات</button>
 			</div>
 		</form>
-
-		<div class="gvghu-card">
-			<h2>راهنمای سریع انتشار نسخه جدید</h2>
-			<ol style="line-height:2.2;font-size:13.5px;color:#334155;">
-				<li>در فایل <code>groot-vision-tools.php</code> مقدار <code>Version</code> را بالا ببرید (مثلاً 1.1.0 → 1.2.0).</li>
-				<li>در ریشه پروژه یک تگ نسخه بسازید: <code>git tag v1.2.0 && git push origin v1.2.0</code></li>
-				<li>در گیت‌هاب، از بخش Releases روی «Draft a new release» بزنید، همان تگ را انتخاب کنید و توضیح تغییرات را بنویسید، سپس Publish کنید.</li>
-				<li>حداکثر تا ۶ ساعت بعد (یا با دکمه «بررسی دستی» بالا، فوری) وردپرس دکمه به‌روزرسانی را نشان می‌دهد و اعلان تغییرات هم در پیشخوان ظاهر می‌شود.</li>
-			</ol>
-		</div>
-
 		<p style="font-size:11.5px;color:#888;text-align:center;">ساخته و توسعه‌یافته توسط <strong>Groot Vision</strong></p>
 	</div>
 	<?php

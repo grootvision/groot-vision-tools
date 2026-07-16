@@ -481,7 +481,7 @@ function wpmc_render_admin_page() {
 
 		<hr style="margin-top:40px;">
 		<p style="text-align:center; color:#888; font-size:13px;">
-			ساخته شده توسط علیرضا رحمتی | اینستاگرام: <a href="https://instagram.com/alireza.webcode" target="_blank">alireza.webcode</a> | تلگرام: <a href="https://t.me/alireza_webcode" target="_blank">alireza_webcode</a>
+			ساخته شده توسط علیرضا رحمتی | اینستاگرام: <a href="https://instagram.com/grootvision" target="_blank">grootvision</a> | تلگرام: <a href="https://t.me/grootvision" target="_blank">grootvision</a>
 		</p>
 	</div>
 
@@ -910,10 +910,10 @@ function wpmc_render_maintenance_html( $o, $end_ts ) {
 			<?php endif; ?>
 
 			<div class="wpmc-social">
-				<a href="https://instagram.com/alireza.webcode" target="_blank" rel="noopener" aria-label="اینستاگرام">
+				<a href="https://instagram.com/grootvision" target="_blank" rel="noopener" aria-label="اینستاگرام">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg>
 				</a>
-				<a href="https://t.me/alireza_webcode" target="_blank" rel="noopener" aria-label="تلگرام">
+				<a href="https://t.me/grootvision" target="_blank" rel="noopener" aria-label="تلگرام">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>
 				</a>
 			</div>
