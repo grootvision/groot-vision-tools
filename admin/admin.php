@@ -162,6 +162,16 @@ function gv_hub_get_items() {
 			'status_option' => 'gv_visitor_analytics_settings',
 			'status_key'    => 'enabled',
 		),
+array(
+			'title'         => 'حالت تعمیر',
+			'desc'          => 'بخش حالت تعمیر برای بروزرسانی وبسایت، هنگام آپدیت های ضروری و احتمال مشکل ساز شدن بازدید مشتری.',
+			'icon'          => '📈',
+			'page'          => 'wpmc-maintenance',
+			'color'         => '#2563eb',
+			'status_option' => 'manage_options',
+			'status_key'    => 'enabled',
+		),
+
 	);
 }
 
