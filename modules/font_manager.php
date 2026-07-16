@@ -2,10 +2,18 @@
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 /**
  * ==========================================================
- *  Groot Vision — مدیریت فونت سایت
- *  آپلود فایل فونت (woff2/woff/ttf)، ساخت فونت‌فیس خودکار،
- *  و اعمال آن روی کل سایت با یک مقیاس تایپوگرافی هوشمند
- *  (h1 بزرگ‌تر، h2 کمی کوچک‌تر و ...)
+ *  Groot Vision — مدیریت فونت سایت (نسخه ۲)
+ *  ------------------------------------------------------------
+ *  تغییرات نسبت به نسخه قبل:
+ *   ۱) هر فونت در کتابخانه می‌تواند چند وزن (Weight) داشته باشد
+ *      (نازک تا خیلی ضخیم) + حالت Italic برای هرکدام — نه فقط
+ *      Regular/Bold/Italic ثابت.
+ *   ۲) فونت‌ها دیگر فقط "یک فونت برای کل سایت" نیستند؛ برای هر
+ *      بخش (متن اصلی، سربرگ‌ها، منو، دکمه‌ها، لوگو/عنوان سایت)
+ *      می‌توان یک فونت جدا از کتابخانه انتخاب کرد.
+ *   ۳) پیش‌نمایش زنده‌ی هر فونت داخل کتابخانه.
+ *   ۴) اعمال صحیح روی کل سایت با ترتیب اولویت درست بین
+ *      انتخاب‌های عمومی و اختصاصی هر بخش.
  * ==========================================================
  */
 define( 'GV_FONT_OPT', 'gv_font_manager_settings' );
@@ -21,22 +29,110 @@ function gv_font_upload_dir() {
 	return array( 'dir' => $dir, 'url' => $url );
 }
 
-function gv_font_default_settings() {
+/** نقش‌های تایپوگرافی سایت — هر کدام می‌توانند فونت اختصاصی خودشان را داشته باشند */
+function gv_font_get_roles() {
 	return array(
-		'enabled'     => 0,
-		'active_font' => '', // slug فونت انتخاب‌شده از کتابخانه
-		'base_size'   => 16, // سایز فونت پایه بدنه سایت (px)
-		'scale'       => 1.25, // نسبت مقیاس تایپوگرافی بین سربرگ‌ها (Major Third پیش‌فرض)
+		'body'    => array(
+			'label'    => 'متن اصلی سایت (بدنه)',
+			'desc'     => 'پاراگراف‌ها، متن‌های عمومی، فرم‌ها',
+			'selector' => 'body, p, li, span, a, input, textarea, select, label',
+			'weight'   => 400,
+		),
+		'heading' => array(
+			'label'    => 'سربرگ‌ها (h1 تا h6)',
+			'desc'     => 'عنوان‌ها با مقیاس تایپوگرافی خودکار بزرگ می‌شوند',
+			'selector' => 'h1, h2, h3, h4, h5, h6',
+			'weight'   => 700,
+		),
+		'menu'    => array(
+			'label'    => 'منوی سایت',
+			'desc'     => 'آیتم‌های منوی اصلی و ناوبری',
+			'selector' => 'nav a, .menu a, .menu-item a, .nav-menu a, #main-menu a, .main-navigation a',
+			'weight'   => 500,
+		),
+		'button'  => array(
+			'label'    => 'دکمه‌ها',
+			'desc'     => 'دکمه‌های سایت، فروشگاه و فرم‌ها',
+			'selector' => 'button, .button, .btn, input[type="submit"], input[type="button"], .wp-block-button__link',
+			'weight'   => 600,
+		),
+		'logo'    => array(
+			'label'    => 'عنوان سایت / لوگوی متنی',
+			'desc'     => 'در صورتی که لوگوی سایت شما متنی باشد',
+			'selector' => '.site-title, .site-title a, .site-branding .site-title, .custom-logo-link + .site-title',
+			'weight'   => 800,
+		),
 	);
 }
 
-function gv_font_get_settings() {
-	return wp_parse_args( get_option( GV_FONT_OPT, array() ), gv_font_default_settings() );
+function gv_font_default_settings() {
+	$defaults = array(
+		'enabled'   => 0,
+		'base_size' => 16, // سایز فونت پایه بدنه سایت (px)
+		'scale'     => 1.25, // نسبت مقیاس تایپوگرافی بین سربرگ‌ها (Major Third پیش‌فرض)
+		'roles'     => array(),
+	);
+	foreach ( gv_font_get_roles() as $key => $role ) {
+		$defaults['roles'][ $key ] = array(
+			'font'   => '',            // slug فونت انتخاب‌شده از کتابخانه، خالی = وراثت از بدنه یا تم
+			'weight' => $role['weight'],
+		);
+	}
+	return $defaults;
 }
 
-/** کتابخانه فونت‌های آپلودشده: آرایه‌ای از slug => { name, regular, bold, italic } */
+function gv_font_get_settings() {
+	$saved = get_option( GV_FONT_OPT, array() );
+	$defaults = gv_font_default_settings();
+
+	// سازگاری با نسخه قدیمی: اگر تنظیمات قبلی active_font ذخیره کرده، آن را به‌عنوان فونت بدنه بیاور
+	if ( ! empty( $saved['active_font'] ) && empty( $saved['roles']['body']['font'] ) ) {
+		$saved['roles']['body']['font'] = $saved['active_font'];
+	}
+
+	$merged = wp_parse_args( $saved, $defaults );
+	foreach ( $defaults['roles'] as $key => $role_defaults ) {
+		$merged['roles'][ $key ] = wp_parse_args(
+			isset( $saved['roles'][ $key ] ) && is_array( $saved['roles'][ $key ] ) ? $saved['roles'][ $key ] : array(),
+			$role_defaults
+		);
+	}
+	return $merged;
+}
+
+/** کتابخانه فونت‌های آپلودشده: آرایه‌ای از slug => { name, files: [ {weight,style,file}, ... ] } */
 function gv_font_get_library() {
-	return get_option( GV_FONT_LIST_OPT, array() );
+	$library = get_option( GV_FONT_LIST_OPT, array() );
+
+	// سازگاری با ساختار قدیمی (regular/bold/italic) → تبدیل به files[]
+	foreach ( $library as $slug => &$font ) {
+		if ( ! isset( $font['files'] ) ) {
+			$files = array();
+			if ( ! empty( $font['regular'] ) ) { $files[] = array( 'weight' => 400, 'style' => 'normal', 'file' => $font['regular'] ); }
+			if ( ! empty( $font['bold'] ) )    { $files[] = array( 'weight' => 700, 'style' => 'normal', 'file' => $font['bold'] ); }
+			if ( ! empty( $font['italic'] ) )  { $files[] = array( 'weight' => 400, 'style' => 'italic', 'file' => $font['italic'] ); }
+			$font['files'] = $files;
+		}
+	}
+	unset( $font );
+	return $library;
+}
+
+/** نزدیک‌ترین فایلِ یک وزن دلخواه را از میان فایل‌های یک فونت پیدا می‌کند (برای fallback هوشمند) */
+function gv_font_closest_weight_file( $files, $target_weight, $style = 'normal' ) {
+	if ( empty( $files ) ) { return null; }
+	$best = null;
+	$best_diff = 99999;
+	foreach ( $files as $f ) {
+		if ( $f['style'] !== $style ) { continue; }
+		$diff = abs( (int) $f['weight'] - (int) $target_weight );
+		if ( $diff < $best_diff ) { $best_diff = $diff; $best = $f; }
+	}
+	if ( ! $best && $style === 'italic' ) {
+		// اگر ایتالیک نداشت، از نرمال استفاده کن
+		return gv_font_closest_weight_file( $files, $target_weight, 'normal' );
+	}
+	return $best;
 }
 
 /* ==========================================================================
@@ -55,7 +151,7 @@ function gv_font_admin_menu() {
 	);
 }
 
-/* ---- افزودن فونت جدید به کتابخانه ---- */
+/* ---- افزودن فونت جدید (یا افزودن وزن جدید به فونت موجود) به کتابخانه ---- */
 add_action( 'admin_post_gv_font_upload', 'gv_font_handle_upload' );
 function gv_font_handle_upload() {
 	if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'دسترسی ندارید.' ); }
@@ -66,40 +162,66 @@ function gv_font_handle_upload() {
 		wp_safe_redirect( admin_url( 'admin.php?page=gv-font-manager&error=name' ) );
 		exit;
 	}
-	$slug = sanitize_title( $name );
+	$slug  = sanitize_title( $name );
 	$paths = gv_font_upload_dir();
 
 	$allowed_ext = array( 'woff2', 'woff', 'ttf', 'otf' );
-	$saved_files = array();
+	$allowed_weights = array( 100, 200, 300, 400, 500, 600, 700, 800, 900 );
 
-	foreach ( array( 'regular', 'bold', 'italic' ) as $variant ) {
-		if ( empty( $_FILES[ 'font_' . $variant ] ) || empty( $_FILES[ 'font_' . $variant ]['name'] ) ) { continue; }
+	$weights = isset( $_POST['file_weight'] ) ? (array) $_POST['file_weight'] : array();
+	$styles  = isset( $_POST['file_style'] ) ? (array) $_POST['file_style'] : array();
+	$files   = isset( $_FILES['font_files'] ) ? $_FILES['font_files'] : array();
 
-		$file = $_FILES[ 'font_' . $variant ];
-		$ext  = strtolower( pathinfo( $file['name'], PATHINFO_EXTENSION ) );
-		if ( ! in_array( $ext, $allowed_ext, true ) ) { continue; }
-		if ( ! empty( $file['error'] ) ) { continue; }
+	$new_files = array();
 
-		$dest_name = $slug . '-' . $variant . '.' . $ext;
-		$dest_path = trailingslashit( $paths['dir'] ) . $dest_name;
+	if ( ! empty( $files['name'] ) && is_array( $files['name'] ) ) {
+		foreach ( $files['name'] as $i => $orig_name ) {
+			if ( empty( $orig_name ) ) { continue; }
+			if ( ! empty( $files['error'][ $i ] ) ) { continue; }
 
-		if ( move_uploaded_file( $file['tmp_name'], $dest_path ) ) {
-			$saved_files[ $variant ] = $dest_name;
+			$ext = strtolower( pathinfo( $orig_name, PATHINFO_EXTENSION ) );
+			if ( ! in_array( $ext, $allowed_ext, true ) ) { continue; }
+
+			$weight = isset( $weights[ $i ] ) ? intval( $weights[ $i ] ) : 400;
+			if ( ! in_array( $weight, $allowed_weights, true ) ) { $weight = 400; }
+			$style = ( isset( $styles[ $i ] ) && $styles[ $i ] === 'italic' ) ? 'italic' : 'normal';
+
+			$dest_name = $slug . '-' . $weight . ( $style === 'italic' ? 'i' : '' ) . '-' . wp_generate_password( 4, false, false ) . '.' . $ext;
+			$dest_path = trailingslashit( $paths['dir'] ) . $dest_name;
+
+			if ( move_uploaded_file( $files['tmp_name'][ $i ], $dest_path ) ) {
+				$new_files[] = array( 'weight' => $weight, 'style' => $style, 'file' => $dest_name );
+			}
 		}
 	}
 
-	if ( empty( $saved_files['regular'] ) ) {
+	if ( empty( $new_files ) ) {
 		wp_safe_redirect( admin_url( 'admin.php?page=gv-font-manager&error=file' ) );
 		exit;
 	}
 
 	$library = gv_font_get_library();
-	$library[ $slug ] = array(
-		'name'    => $name,
-		'regular' => $saved_files['regular'] ?? '',
-		'bold'    => $saved_files['bold'] ?? '',
-		'italic'  => $saved_files['italic'] ?? '',
-	);
+
+	if ( isset( $library[ $slug ] ) ) {
+		// افزودن وزن‌های جدید به فونت موجود (وزن‌های تکراری با فایل جدید جایگزین می‌شوند)
+		foreach ( $new_files as $nf ) {
+			$replaced = false;
+			foreach ( $library[ $slug ]['files'] as &$existing ) {
+				if ( (int) $existing['weight'] === (int) $nf['weight'] && $existing['style'] === $nf['style'] ) {
+					$old = trailingslashit( $paths['dir'] ) . $existing['file'];
+					if ( file_exists( $old ) ) { @unlink( $old ); }
+					$existing = $nf;
+					$replaced = true;
+					break;
+				}
+			}
+			unset( $existing );
+			if ( ! $replaced ) { $library[ $slug ]['files'][] = $nf; }
+		}
+	} else {
+		$library[ $slug ] = array( 'name' => $name, 'files' => $new_files );
+	}
+
 	update_option( GV_FONT_LIST_OPT, $library );
 
 	wp_safe_redirect( admin_url( 'admin.php?page=gv-font-manager&uploaded=1' ) );
@@ -111,24 +233,56 @@ function gv_font_handle_delete() {
 	if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'دسترسی ندارید.' ); }
 	check_admin_referer( GV_FONT_NONCE );
 
-	$slug = sanitize_key( $_GET['slug'] ?? '' );
+	$slug    = sanitize_key( $_GET['slug'] ?? '' );
 	$library = gv_font_get_library();
 	if ( isset( $library[ $slug ] ) ) {
 		$paths = gv_font_upload_dir();
-		foreach ( array( 'regular', 'bold', 'italic' ) as $v ) {
-			if ( ! empty( $library[ $slug ][ $v ] ) ) {
-				$f = trailingslashit( $paths['dir'] ) . $library[ $slug ][ $v ];
-				if ( file_exists( $f ) ) { @unlink( $f ); }
-			}
+		foreach ( $library[ $slug ]['files'] as $f ) {
+			$path = trailingslashit( $paths['dir'] ) . $f['file'];
+			if ( file_exists( $path ) ) { @unlink( $path ); }
 		}
 		unset( $library[ $slug ] );
 		update_option( GV_FONT_LIST_OPT, $library );
 
+		// اگر این فونت در یکی از نقش‌ها استفاده شده بود، پاک شود
 		$s = gv_font_get_settings();
-		if ( $s['active_font'] === $slug ) {
-			$s['active_font'] = '';
-			update_option( GV_FONT_OPT, $s );
+		$changed = false;
+		foreach ( $s['roles'] as $key => $role ) {
+			if ( $role['font'] === $slug ) { $s['roles'][ $key ]['font'] = ''; $changed = true; }
 		}
+		if ( $changed ) { update_option( GV_FONT_OPT, $s ); }
+	}
+	wp_safe_redirect( admin_url( 'admin.php?page=gv-font-manager&deleted=1' ) );
+	exit;
+}
+
+/** حذف فقط یک وزن خاص از یک فونت */
+add_action( 'admin_post_gv_font_delete_weight', 'gv_font_handle_delete_weight' );
+function gv_font_handle_delete_weight() {
+	if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'دسترسی ندارید.' ); }
+	check_admin_referer( GV_FONT_NONCE );
+
+	$slug   = sanitize_key( $_GET['slug'] ?? '' );
+	$weight = intval( $_GET['weight'] ?? 0 );
+	$style  = ( ( $_GET['style'] ?? 'normal' ) === 'italic' ) ? 'italic' : 'normal';
+
+	$library = gv_font_get_library();
+	if ( isset( $library[ $slug ] ) ) {
+		$paths = gv_font_upload_dir();
+		foreach ( $library[ $slug ]['files'] as $i => $f ) {
+			if ( (int) $f['weight'] === $weight && $f['style'] === $style ) {
+				$path = trailingslashit( $paths['dir'] ) . $f['file'];
+				if ( file_exists( $path ) ) { @unlink( $path ); }
+				unset( $library[ $slug ]['files'][ $i ] );
+				$library[ $slug ]['files'] = array_values( $library[ $slug ]['files'] );
+				break;
+			}
+		}
+		// اگر دیگر هیچ فایلی نماند، کل فونت حذف شود
+		if ( empty( $library[ $slug ]['files'] ) ) {
+			unset( $library[ $slug ] );
+		}
+		update_option( GV_FONT_LIST_OPT, $library );
 	}
 	wp_safe_redirect( admin_url( 'admin.php?page=gv-font-manager&deleted=1' ) );
 	exit;
@@ -140,15 +294,27 @@ function gv_font_save_settings() {
 	check_admin_referer( GV_FONT_NONCE );
 
 	$library = gv_font_get_library();
-	$active  = sanitize_key( $_POST['active_font'] ?? '' );
-	if ( '' !== $active && ! isset( $library[ $active ] ) ) { $active = ''; }
+	$roles   = gv_font_get_roles();
 
 	$settings = array(
-		'enabled'     => isset( $_POST['enabled'] ) ? 1 : 0,
-		'active_font' => $active,
-		'base_size'   => max( 12, min( 22, intval( $_POST['base_size'] ?? 16 ) ) ),
-		'scale'       => max( 1.05, min( 1.6, floatval( $_POST['scale'] ?? 1.25 ) ) ),
+		'enabled'   => isset( $_POST['enabled'] ) ? 1 : 0,
+		'base_size' => max( 12, min( 22, intval( $_POST['base_size'] ?? 16 ) ) ),
+		'scale'     => max( 1.05, min( 1.6, floatval( $_POST['scale'] ?? 1.25 ) ) ),
+		'roles'     => array(),
 	);
+
+	foreach ( $roles as $key => $role_def ) {
+		$font = sanitize_key( $_POST[ 'role_font_' . $key ] ?? '' );
+		if ( '' !== $font && ! isset( $library[ $font ] ) ) { $font = ''; }
+
+		$weight = intval( $_POST[ 'role_weight_' . $key ] ?? $role_def['weight'] );
+		if ( ! in_array( $weight, array( 100, 200, 300, 400, 500, 600, 700, 800, 900 ), true ) ) {
+			$weight = $role_def['weight'];
+		}
+
+		$settings['roles'][ $key ] = array( 'font' => $font, 'weight' => $weight );
+	}
+
 	update_option( GV_FONT_OPT, $settings );
 	wp_safe_redirect( admin_url( 'admin.php?page=gv-font-manager&updated=1' ) );
 	exit;
@@ -158,59 +324,109 @@ function gv_font_save_settings() {
    صفحه مدیریت
    ========================================================================== */
 
+function gv_font_weight_label( $w ) {
+	$labels = array(
+		100 => 'خیلی نازک (100)', 200 => 'نازک (200)', 300 => 'سبک (300)',
+		400 => 'معمولی (400)', 500 => 'متوسط (500)', 600 => 'نیمه‌ضخیم (600)',
+		700 => 'ضخیم (700)', 800 => 'خیلی‌ضخیم (800)', 900 => 'سیاه (900)',
+	);
+	return $labels[ (int) $w ] ?? ( $w . '' );
+}
+
 function gv_font_render_admin_page() {
 	if ( ! current_user_can( 'manage_options' ) ) { return; }
 	$s       = gv_font_get_settings();
 	$library = gv_font_get_library();
+	$roles   = gv_font_get_roles();
+	$paths   = gv_font_upload_dir();
 	?>
-	<div class="wrap" dir="rtl" style="font-family: Tahoma, sans-serif; max-width:1000px;">
+	<div class="wrap" dir="rtl" style="font-family: 'Vazirmatn', Tahoma, sans-serif; max-width:1080px;">
 		<style>
-			.gvfont-header{background:linear-gradient(120deg,#0e4037,#145c4d);color:#fff;padding:22px 26px;border-radius:14px;margin:20px 0;}
-			.gvfont-header h1{margin:0;font-size:20px;color:#fff;}
-			.gvfont-card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:22px;margin-bottom:18px;}
-			.gvfont-card h2{margin-top:0;font-size:15px;}
+			.gvfont-header{background:linear-gradient(120deg,#0e4037,#145c4d);color:#fff;padding:26px 30px;border-radius:16px;margin:20px 0 28px;box-shadow:0 10px 30px rgba(14,64,55,.3);}
+			.gvfont-header h1{margin:0;font-size:22px;color:#fff;display:flex;align-items:center;gap:10px;}
+			.gvfont-header p{margin:8px 0 0;font-size:13px;color:#cbd5e1;}
+			.gvfont-card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,.03);}
+			.gvfont-card h2{margin-top:0;font-size:16px;color:#0f172a;display:flex;align-items:center;gap:8px;}
 			.gvfont-field{margin-bottom:14px;}
 			.gvfont-field label{display:block;font-weight:700;font-size:13px;margin-bottom:5px;color:#334155;}
-			.gvfont-field input[type=text],.gvfont-field input[type=file],.gvfont-field input[type=number]{width:100%;max-width:380px;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;}
-			.gvfont-btn{background:#111827;color:#fff !important;border:none;padding:10px 22px;border-radius:10px;font-weight:600;cursor:pointer;}
-			.gvfont-lib-item{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:10px;}
-			.gvfont-lib-item.is-active{border-color:#0e4037;background:#f0fdf9;}
-			.gvfont-lib-name{font-weight:700;font-size:14px;}
-			.gvfont-lib-tag{font-size:11px;color:#94a3b8;}
-			.gvfont-del{color:#b91c1c;text-decoration:none;font-size:12.5px;}
-			.gvfont-preview{border:1px dashed #cbd5e1;border-radius:12px;padding:20px;margin-top:10px;}
+			.gvfont-field input[type=text],.gvfont-field input[type=file],.gvfont-field input[type=number],.gvfont-field select{width:100%;max-width:380px;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;}
+			.gvfont-btn{background:#0e4037;color:#fff !important;border:none;padding:10px 22px;border-radius:10px;font-weight:600;cursor:pointer;font-size:13.5px;}
+			.gvfont-btn.secondary{background:#f1f5f9;color:#334155 !important;}
+			.gvfont-lib-item{border:1px solid #e2e8f0;border-radius:14px;margin-bottom:14px;overflow:hidden;}
+			.gvfont-lib-item.is-used{border-color:#0e4037;box-shadow:0 0 0 2px rgba(14,64,55,.08);}
+			.gvfont-lib-item-top{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:#f8fafc;}
+			.gvfont-lib-name{font-weight:800;font-size:14.5px;color:#0f172a;}
+			.gvfont-lib-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+			.gvfont-tag{font-size:10.5px;background:#e2e8f0;color:#475569;padding:3px 9px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;}
+			.gvfont-tag a{color:#b91c1c;text-decoration:none;}
+			.gvfont-del{color:#b91c1c;text-decoration:none;font-size:12.5px;font-weight:600;}
+			.gvfont-preview{padding:16px 18px;border-top:1px dashed #e2e8f0;font-size:20px;color:#0f172a;line-height:1.9;}
+			.gvfont-role-row{display:grid;grid-template-columns:1.2fr 1.4fr 1fr;gap:14px;align-items:end;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:12px;}
+			.gvfont-role-row .role-info b{display:block;font-size:13.5px;color:#0f172a;}
+			.gvfont-role-row .role-info span{font-size:11.5px;color:#94a3b8;}
+			.gvfont-filerow{display:grid;grid-template-columns:1fr 1fr 1.4fr auto;gap:10px;align-items:center;margin-bottom:8px;}
+			#gvfont-filerows input[type=file]{max-width:none;}
+			.gvfont-addrow{font-size:12.5px;color:#0e4037;font-weight:700;cursor:pointer;background:none;border:1px dashed #0e4037;border-radius:8px;padding:6px 12px;}
+			@media(max-width:782px){ .gvfont-role-row, .gvfont-filerow{ grid-template-columns:1fr; } }
 		</style>
 
-		<div class="gvfont-header"><h1>🔤 مدیریت فونت سایت</h1></div>
+		<div class="gvfont-header">
+			<h1>🔤 مدیریت فونت سایت</h1>
+			<p>فونت دلخواه را برای هر بخش از سایت (متن، سربرگ، منو، دکمه، لوگو) جداگانه انتخاب کنید.</p>
+		</div>
 
 		<?php if ( isset( $_GET['updated'] ) ) : ?><div class="notice notice-success is-dismissible"><p>تنظیمات ذخیره شد.</p></div><?php endif; ?>
 		<?php if ( isset( $_GET['uploaded'] ) ) : ?><div class="notice notice-success is-dismissible"><p>فونت با موفقیت اضافه شد.</p></div><?php endif; ?>
-		<?php if ( isset( $_GET['deleted'] ) ) : ?><div class="notice notice-success is-dismissible"><p>فونت حذف شد.</p></div><?php endif; ?>
+		<?php if ( isset( $_GET['deleted'] ) ) : ?><div class="notice notice-success is-dismissible"><p>مورد حذف شد.</p></div><?php endif; ?>
 		<?php if ( isset( $_GET['error'] ) ) : ?><div class="notice notice-error is-dismissible"><p>خطا: نام فونت یا فایل معتبر ارسال نشد (فرمت‌های مجاز: woff2, woff, ttf, otf).</p></div><?php endif; ?>
 
 		<div class="gvfont-card">
-			<h2>➕ افزودن فونت جدید به کتابخانه</h2>
+			<h2>➕ افزودن فونت / وزن جدید به کتابخانه</h2>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data">
 				<input type="hidden" name="action" value="gv_font_upload">
 				<?php wp_nonce_field( GV_FONT_NONCE ); ?>
 				<div class="gvfont-field">
 					<label>نام فونت</label>
 					<input type="text" name="font_name" placeholder="مثلاً: وزیرمتن، ایران‌یکان، دیره">
+					<small style="color:#94a3b8;">اگر نام فونتی که قبلاً اضافه کرده‌اید را دوباره وارد کنید، فایل‌های جدید به‌عنوان وزن‌های اضافه به همان فونت افزوده می‌شوند.</small>
 				</div>
-				<div class="gvfont-field">
-					<label>فایل حالت عادی (Regular) — الزامی</label>
-					<input type="file" name="font_regular" accept=".woff2,.woff,.ttf,.otf">
+
+				<label style="display:block;font-weight:700;font-size:13px;margin-bottom:8px;color:#334155;">فایل‌های فونت (هر فایل = یک وزن مشخص)</label>
+				<div id="gvfont-filerows">
+					<div class="gvfont-filerow">
+						<select name="file_weight[]">
+							<?php foreach ( array( 100, 200, 300, 400, 500, 600, 700, 800, 900 ) as $w ) : ?>
+								<option value="<?php echo $w; ?>" <?php selected( $w, 400 ); ?>><?php echo esc_html( gv_font_weight_label( $w ) ); ?></option>
+							<?php endforeach; ?>
+						</select>
+						<select name="file_style[]">
+							<option value="normal">حالت عادی</option>
+							<option value="italic">کج (Italic)</option>
+						</select>
+						<input type="file" name="font_files[]" accept=".woff2,.woff,.ttf,.otf">
+						<span></span>
+					</div>
 				</div>
-				<div class="gvfont-field">
-					<label>فایل حالت ضخیم (Bold) — اختیاری</label>
-					<input type="file" name="font_bold" accept=".woff2,.woff,.ttf,.otf">
+				<button type="button" class="gvfont-addrow" onclick="gvFontAddRow()">➕ افزودن وزن دیگر</button>
+				<div style="margin-top:18px;">
+					<button type="submit" class="gvfont-btn">📤 آپلود</button>
 				</div>
-				<div class="gvfont-field">
-					<label>فایل حالت کج (Italic) — اختیاری</label>
-					<input type="file" name="font_italic" accept=".woff2,.woff,.ttf,.otf">
-				</div>
-				<button type="submit" class="gvfont-btn">📤 آپلود فونت</button>
 			</form>
+			<script>
+			function gvFontAddRow(){
+				var wrap = document.getElementById('gvfont-filerows');
+				var row = wrap.firstElementChild.cloneNode(true);
+				row.querySelectorAll('input[type=file]').forEach(function(i){ i.value=''; });
+				var del = document.createElement('button');
+				del.type = 'button';
+				del.textContent = '✕';
+				del.className = 'gvfont-btn secondary';
+				del.style.padding = '6px 12px';
+				del.onclick = function(){ row.remove(); };
+				row.lastElementChild.replaceWith(del);
+				wrap.appendChild(row);
+			}
+			</script>
 		</div>
 
 		<div class="gvfont-card">
@@ -218,41 +434,97 @@ function gv_font_render_admin_page() {
 			<?php if ( empty( $library ) ) : ?>
 				<p style="color:#94a3b8;">هنوز فونتی اضافه نکرده‌اید.</p>
 			<?php else : ?>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-					<input type="hidden" name="action" value="gv_font_save_settings">
-					<?php wp_nonce_field( GV_FONT_NONCE ); ?>
-
-					<?php foreach ( $library as $slug => $font ) : ?>
-						<label class="gvfont-lib-item <?php echo $s['active_font'] === $slug ? 'is-active' : ''; ?>">
-							<span>
-								<input type="radio" name="active_font" value="<?php echo esc_attr( $slug ); ?>" <?php checked( $s['active_font'], $slug ); ?>>
-								<span class="gvfont-lib-name"><?php echo esc_html( $font['name'] ); ?></span>
-								<span class="gvfont-lib-tag"> — <?php echo $font['bold'] ? 'دارای Bold' : 'بدون Bold'; ?><?php echo $font['italic'] ? '، دارای Italic' : ''; ?></span>
-							</span>
-							<a class="gvfont-del" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gv_font_delete&slug=' . $slug ), GV_FONT_NONCE ) ); ?>" onclick="return confirm('حذف این فونت؟');">🗑️ حذف</a>
-						</label>
-					<?php endforeach; ?>
-
-					<div class="gvfont-field" style="margin-top:18px;">
-						<label><input type="checkbox" name="enabled" <?php checked( $s['enabled'], 1 ); ?>> اعمال فونت انتخاب‌شده روی کل سایت</label>
+				<?php
+				$used_slugs = wp_list_pluck( $s['roles'], 'font' );
+				foreach ( $library as $slug => $font ) :
+					$is_used = in_array( $slug, $used_slugs, true );
+					$regular_file = gv_font_closest_weight_file( $font['files'], 400, 'normal' );
+					?>
+					<div class="gvfont-lib-item <?php echo $is_used ? 'is-used' : ''; ?>">
+						<div class="gvfont-lib-item-top">
+							<div>
+								<div class="gvfont-lib-name"><?php echo esc_html( $font['name'] ); ?> <?php echo $is_used ? '<span style="color:#0e4037;font-size:11px;">(در حال استفاده)</span>' : ''; ?></div>
+								<div class="gvfont-lib-tags">
+									<?php foreach ( $font['files'] as $f ) : ?>
+										<span class="gvfont-tag">
+											<?php echo esc_html( gv_font_weight_label( $f['weight'] ) . ( $f['style'] === 'italic' ? ' کج' : '' ) ); ?>
+											<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gv_font_delete_weight&slug=' . $slug . '&weight=' . $f['weight'] . '&style=' . $f['style'] ), GV_FONT_NONCE ) ); ?>" onclick="return confirm('این وزن حذف شود؟');">✕</a>
+										</span>
+									<?php endforeach; ?>
+								</div>
+							</div>
+							<a class="gvfont-del" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gv_font_delete&slug=' . $slug ), GV_FONT_NONCE ) ); ?>" onclick="return confirm('کل این فونت (همه وزن‌ها) حذف شود؟');">🗑️ حذف کامل</a>
+						</div>
+						<?php if ( $regular_file ) : ?>
+						<div class="gvfont-preview" style="font-family:'GVPreview-<?php echo esc_attr( $slug ); ?>', Tahoma, sans-serif;">
+							<style>
+								@font-face{ font-family:'GVPreview-<?php echo esc_attr( $slug ); ?>'; src:url('<?php echo esc_url( trailingslashit( $paths['url'] ) . $regular_file['file'] ); ?>') format('<?php echo gv_font_format( $regular_file['file'] ); ?>'); font-display:swap; }
+							</style>
+							سلام! این یک متن پیش‌نمایش برای «<?php echo esc_html( $font['name'] ); ?>» است — Aa 123
+						</div>
+						<?php endif; ?>
 					</div>
-					<div class="gvfont-field">
-						<label>سایز پایه متن بدنه سایت (پیکسل)</label>
-						<input type="number" name="base_size" min="12" max="22" value="<?php echo esc_attr( $s['base_size'] ); ?>">
-					</div>
-					<div class="gvfont-field">
-						<label>ضریب بزرگ‌شدن سربرگ‌ها (h1 تا h6) — پیش‌فرض ۱.۲۵ توصیه می‌شود</label>
-						<input type="number" step="0.01" name="scale" min="1.05" max="1.6" value="<?php echo esc_attr( $s['scale'] ); ?>">
-						<small style="display:block;color:#94a3b8;margin-top:4px;">با این عدد، اندازه h1 تا h6 به‌صورت خودکار و متناسب محاسبه می‌شود؛ نیازی به تنظیم دستی هر سربرگ نیست.</small>
-					</div>
-
-					<button type="submit" class="gvfont-btn">💾 ذخیره و اعمال</button>
-				</form>
+				<?php endforeach; ?>
 			<?php endif; ?>
 		</div>
 
+		<?php if ( ! empty( $library ) ) : ?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+			<input type="hidden" name="action" value="gv_font_save_settings">
+			<?php wp_nonce_field( GV_FONT_NONCE ); ?>
+
+			<div class="gvfont-card">
+				<h2>🧩 فونت هر بخش سایت</h2>
+				<p style="color:#64748b;font-size:12.5px;margin-top:-6px;">برای هر بخش، یک فونت و وزن از کتابخانه انتخاب کنید. اگر «بدون تغییر» بگذارید، همان فونت بدنه یا تم استفاده می‌شود.</p>
+
+				<?php foreach ( $roles as $key => $role ) : $rv = $s['roles'][ $key ]; ?>
+					<div class="gvfont-role-row">
+						<div class="role-info">
+							<b><?php echo esc_html( $role['label'] ); ?></b>
+							<span><?php echo esc_html( $role['desc'] ); ?></span>
+						</div>
+						<div>
+							<label style="font-size:12px;font-weight:700;color:#334155;">فونت</label>
+							<select name="role_font_<?php echo esc_attr( $key ); ?>" style="width:100%;">
+								<option value=""><?php echo $key === 'body' ? '— فونت پیش‌فرض تم —' : '— وراثت از متن اصلی —'; ?></option>
+								<?php foreach ( $library as $slug => $font ) : ?>
+									<option value="<?php echo esc_attr( $slug ); ?>" <?php selected( $rv['font'], $slug ); ?>><?php echo esc_html( $font['name'] ); ?></option>
+								<?php endforeach; ?>
+							</select>
+						</div>
+						<div>
+							<label style="font-size:12px;font-weight:700;color:#334155;">وزن</label>
+							<select name="role_weight_<?php echo esc_attr( $key ); ?>" style="width:100%;">
+								<?php foreach ( array( 100, 200, 300, 400, 500, 600, 700, 800, 900 ) as $w ) : ?>
+									<option value="<?php echo $w; ?>" <?php selected( $rv['weight'], $w ); ?>><?php echo esc_html( gv_font_weight_label( $w ) ); ?></option>
+								<?php endforeach; ?>
+							</select>
+						</div>
+					</div>
+				<?php endforeach; ?>
+			</div>
+
+			<div class="gvfont-card">
+				<h2>⚙️ تنظیمات عمومی</h2>
+				<div class="gvfont-field">
+					<label><input type="checkbox" name="enabled" <?php checked( $s['enabled'], 1 ); ?>> اعمال این تنظیمات روی کل سایت</label>
+				</div>
+				<div class="gvfont-field">
+					<label>سایز پایه متن بدنه سایت (پیکسل)</label>
+					<input type="number" name="base_size" min="12" max="22" value="<?php echo esc_attr( $s['base_size'] ); ?>">
+				</div>
+				<div class="gvfont-field">
+					<label>ضریب بزرگ‌شدن سربرگ‌ها (h1 تا h6) — پیش‌فرض ۱.۲۵ توصیه می‌شود</label>
+					<input type="number" step="0.01" name="scale" min="1.05" max="1.6" value="<?php echo esc_attr( $s['scale'] ); ?>">
+					<small style="display:block;color:#94a3b8;margin-top:4px;">با این عدد، اندازه h1 تا h6 به‌صورت خودکار و متناسب محاسبه می‌شود؛ نیازی به تنظیم دستی هر سربرگ نیست.</small>
+				</div>
+				<button type="submit" class="gvfont-btn">💾 ذخیره و اعمال</button>
+			</div>
+		</form>
+		<?php endif; ?>
+
 		<p style="font-size:11.5px;color:#888;text-align:center;margin-top:24px;">
-			نکته: می‌توانید به‌جای آپلود، فایل‌های فونت را مستقیماً داخل پوشه <code>wp-content/plugins/groot-vision-tools/fonts/</code> هم قرار دهید؛ اما ساده‌ترین راه همین فرم بالاست چون خودکار در آدرس uploads سایت ذخیره و بارگذاری می‌شود.
+			نکته: برای بهترین نتیجه، حتماً فرمت <code>woff2</code> آپلود کنید (سبک‌ترین و سریع‌ترین فرمت برای وب).
 		</p>
 	</div>
 	<?php
@@ -265,18 +537,26 @@ function gv_font_render_admin_page() {
 add_action( 'wp_head', 'gv_font_output_css', 40 );
 function gv_font_output_css() {
 	$s = gv_font_get_settings();
-	if ( empty( $s['enabled'] ) || empty( $s['active_font'] ) ) { return; }
+	if ( empty( $s['enabled'] ) ) { return; }
 
 	$library = gv_font_get_library();
-	if ( empty( $library[ $s['active_font'] ] ) ) { return; }
+	$roles   = gv_font_get_roles();
+	$paths   = gv_font_upload_dir();
 
-	$font  = $library[ $s['active_font'] ];
-	$paths = gv_font_upload_dir();
-	$family_slug = 'GVFont-' . $s['active_font'];
+	$body_font = $s['roles']['body']['font'];
+
+	// فونت‌هایی که واقعاً استفاده می‌شوند را جمع می‌کنیم تا فقط برای آن‌ها @font-face بسازیم
+	$used_fonts = array();
+	foreach ( $s['roles'] as $key => $rv ) {
+		$font = $rv['font'];
+		if ( '' === $font && 'body' !== $key ) { $font = $body_font; } // وراثت
+		if ( '' !== $font && isset( $library[ $font ] ) ) { $used_fonts[ $font ] = true; }
+	}
+
+	if ( empty( $used_fonts ) ) { return; }
 
 	$base  = (float) $s['base_size'];
 	$scale = (float) $s['scale'];
-	// مقیاس تایپوگرافی: هر سربرگ بر اساس فاصله‌اش تا h6 با توان scale بزرگ می‌شود
 	$sizes = array(
 		'h1' => round( $base * pow( $scale, 5 ), 1 ),
 		'h2' => round( $base * pow( $scale, 4 ), 1 ),
@@ -287,36 +567,42 @@ function gv_font_output_css() {
 	);
 	?>
 	<style id="gv-font-manager-css">
+		<?php foreach ( $used_fonts as $slug => $x ) :
+			$font   = $library[ $slug ];
+			$family = 'GVFont-' . $slug;
+			foreach ( $font['files'] as $f ) : ?>
 		@font-face{
-			font-family:'<?php echo esc_html( $family_slug ); ?>';
-			src: url('<?php echo esc_url( trailingslashit( $paths['url'] ) . $font['regular'] ); ?>') format('<?php echo gv_font_format( $font['regular'] ); ?>');
-			font-weight:400; font-style:normal; font-display:swap;
+			font-family:'<?php echo esc_html( $family ); ?>';
+			src: url('<?php echo esc_url( trailingslashit( $paths['url'] ) . $f['file'] ); ?>') format('<?php echo gv_font_format( $f['file'] ); ?>');
+			font-weight:<?php echo (int) $f['weight']; ?>; font-style:<?php echo esc_html( $f['style'] ); ?>; font-display:swap;
 		}
-		<?php if ( ! empty( $font['bold'] ) ) : ?>
-		@font-face{
-			font-family:'<?php echo esc_html( $family_slug ); ?>';
-			src: url('<?php echo esc_url( trailingslashit( $paths['url'] ) . $font['bold'] ); ?>') format('<?php echo gv_font_format( $font['bold'] ); ?>');
-			font-weight:700; font-style:normal; font-display:swap;
-		}
-		<?php endif; ?>
-		<?php if ( ! empty( $font['italic'] ) ) : ?>
-		@font-face{
-			font-family:'<?php echo esc_html( $family_slug ); ?>';
-			src: url('<?php echo esc_url( trailingslashit( $paths['url'] ) . $font['italic'] ); ?>') format('<?php echo gv_font_format( $font['italic'] ); ?>');
-			font-weight:400; font-style:italic; font-display:swap;
-		}
-		<?php endif; ?>
+			<?php endforeach;
+		endforeach; ?>
 
-		body, p, li, span, a, input, textarea, select, button{
-			font-family:'<?php echo esc_html( $family_slug ); ?>', -apple-system, Tahoma, sans-serif !important;
-			font-size:<?php echo esc_html( $base ); ?>px;
+		body{ font-size:<?php echo esc_html( $base ); ?>px; }
+
+		<?php foreach ( $roles as $key => $role_def ) :
+			$rv   = $s['roles'][ $key ];
+			$font = $rv['font'];
+			if ( '' === $font && 'body' !== $key ) { $font = $body_font; }
+			if ( '' === $font || ! isset( $library[ $font ] ) ) { continue; }
+			$family = 'GVFont-' . $font;
+			?>
+		<?php echo $role_def['selector']; ?>{
+			font-family:'<?php echo esc_html( $family ); ?>', -apple-system, Tahoma, sans-serif !important;
+			font-weight:<?php echo (int) $rv['weight']; ?> !important;
+			<?php if ( 'heading' === $key ) : ?>
+			line-height:1.4;
+			<?php endif; ?>
 		}
-		h1{ font-family:'<?php echo esc_html( $family_slug ); ?>', Tahoma, sans-serif !important; font-size:<?php echo esc_html( $sizes['h1'] ); ?>px !important; font-weight:700; line-height:1.35; }
-		h2{ font-family:'<?php echo esc_html( $family_slug ); ?>', Tahoma, sans-serif !important; font-size:<?php echo esc_html( $sizes['h2'] ); ?>px !important; font-weight:700; line-height:1.4; }
-		h3{ font-family:'<?php echo esc_html( $family_slug ); ?>', Tahoma, sans-serif !important; font-size:<?php echo esc_html( $sizes['h3'] ); ?>px !important; font-weight:700; line-height:1.45; }
-		h4{ font-family:'<?php echo esc_html( $family_slug ); ?>', Tahoma, sans-serif !important; font-size:<?php echo esc_html( $sizes['h4'] ); ?>px !important; font-weight:700; line-height:1.5; }
-		h5{ font-family:'<?php echo esc_html( $family_slug ); ?>', Tahoma, sans-serif !important; font-size:<?php echo esc_html( $sizes['h5'] ); ?>px !important; font-weight:700; line-height:1.5; }
-		h6{ font-family:'<?php echo esc_html( $family_slug ); ?>', Tahoma, sans-serif !important; font-size:<?php echo esc_html( $sizes['h6'] ); ?>px !important; font-weight:700; line-height:1.55; }
+		<?php endforeach; ?>
+
+		h1{ font-size:<?php echo esc_html( $sizes['h1'] ); ?>px !important; }
+		h2{ font-size:<?php echo esc_html( $sizes['h2'] ); ?>px !important; }
+		h3{ font-size:<?php echo esc_html( $sizes['h3'] ); ?>px !important; }
+		h4{ font-size:<?php echo esc_html( $sizes['h4'] ); ?>px !important; }
+		h5{ font-size:<?php echo esc_html( $sizes['h5'] ); ?>px !important; }
+		h6{ font-size:<?php echo esc_html( $sizes['h6'] ); ?>px !important; }
 	</style>
 	<?php
 }
